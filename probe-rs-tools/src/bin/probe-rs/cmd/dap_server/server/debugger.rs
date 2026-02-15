@@ -23,7 +23,6 @@ use crate::{
         peripherals::svd_variables::SvdCache,
         server::configuration::SessionConfig,
     },
-    rpc::functions::flash::Operation,
     util::flash::build_loader,
 };
 use anyhow::{Context, anyhow};
@@ -40,6 +39,25 @@ use std::{
     time::{Duration, UNIX_EPOCH},
 };
 use time::UtcOffset;
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum Operation {
+    Fill,
+    Erase,
+    Program,
+    Verify,
+}
+
+impl From<probe_rs::flashing::ProgressOperation> for Operation {
+    fn from(operation: probe_rs::flashing::ProgressOperation) -> Self {
+        match operation {
+            probe_rs::flashing::ProgressOperation::Fill => Operation::Fill,
+            probe_rs::flashing::ProgressOperation::Erase => Operation::Erase,
+            probe_rs::flashing::ProgressOperation::Program => Operation::Program,
+            probe_rs::flashing::ProgressOperation::Verify => Operation::Verify,
+        }
+    }
+}
 
 #[derive(Debug)]
 /// The `DebuggerStatus` is used to control how the Debugger::debug_session() decides if it should respond to

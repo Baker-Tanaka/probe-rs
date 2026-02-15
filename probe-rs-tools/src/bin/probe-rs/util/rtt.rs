@@ -4,7 +4,9 @@ use probe_rs::rtt::{self, DownChannel, Error, Rtt, UpChannel};
 use probe_rs::{Core, MemoryInterface};
 use serde::{Deserialize, Serialize};
 
+#[path = "rtt/client.rs"]
 pub(crate) mod client;
+#[path = "rtt/processing.rs"]
 pub(crate) mod processing;
 
 pub use processing::*;

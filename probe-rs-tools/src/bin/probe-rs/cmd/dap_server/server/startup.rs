@@ -10,6 +10,7 @@ use std::{
     time::{Duration, UNIX_EPOCH},
 };
 use time::UtcOffset;
+use tokio_util::sync::CancellationToken;
 
 #[derive(Copy, Clone, Debug, Deserialize, PartialEq)]
 pub(crate) enum TargetSessionType {
@@ -38,6 +39,25 @@ pub async fn debug(
     log_file: Option<&Path>,
     timestamp_offset: UtcOffset,
 ) -> Result<()> {
+    debug_with_shutdown(
+        lister,
+        addr,
+        single_session,
+        log_file,
+        timestamp_offset,
+        None,
+    )
+    .await
+}
+
+pub async fn debug_with_shutdown(
+    lister: &Lister,
+    addr: std::net::SocketAddr,
+    single_session: bool,
+    log_file: Option<&Path>,
+    timestamp_offset: UtcOffset,
+    shutdown: Option<CancellationToken>,
+) -> Result<()> {
     let mut debugger = Debugger::new(timestamp_offset, log_file)?;
 
     let old_hook = std::panic::take_hook();
@@ -48,7 +68,10 @@ pub async fn debug(
         old_hook(panic_info);
     }));
 
-    loop {
+    'server: loop {
+        if shutdown.as_ref().is_some_and(CancellationToken::is_cancelled) {
+            break;
+        }
         let listener = TcpListener::bind(addr)?;
 
         debugger
@@ -60,55 +83,69 @@ pub async fn debug(
             debugger.debug_logger.flush()?;
         }
 
-        listener.set_nonblocking(false)?;
+        listener.set_nonblocking(true)?;
 
-        match listener.accept() {
-            Ok((socket, addr)) => {
-                socket.set_nonblocking(true).with_context(|| {
-                    format!("Failed to negotiate non-blocking socket with request from: {addr}")
-                })?;
+        loop {
+            if shutdown.as_ref().is_some_and(CancellationToken::is_cancelled) {
+                break 'server;
+            }
 
-                debugger
-                    .debug_logger
-                    .log_to_console(&format!("Starting debug session from: {addr}"))?;
+            match listener.accept() {
+                Ok((socket, addr)) => {
+                    socket.set_nonblocking(true).with_context(|| {
+                        format!(
+                            "Failed to negotiate non-blocking socket with request from: {addr}"
+                        )
+                    })?;
 
-                let reader = socket
-                    .try_clone()
-                    .context("Failed to establish a bi-directional Tcp connection.")?;
-                let writer = socket;
+                    debugger
+                        .debug_logger
+                        .log_to_console(&format!("Starting debug session from: {addr}"))?;
 
-                let dap_adapter = DapAdapter::new(reader, writer);
-                let mut debug_adapter = DebugAdapter::new(dap_adapter);
+                    let reader = socket
+                        .try_clone()
+                        .context("Failed to establish a bi-directional Tcp connection.")?;
+                    let writer = socket;
 
-                // Flush any pending log messages to the debug adapter Console Log.
-                debugger.debug_logger.flush_to_dap(&mut debug_adapter)?;
+                    let dap_adapter = DapAdapter::new(reader, writer);
+                    let mut debug_adapter = DebugAdapter::new(dap_adapter);
 
-                let mut registry = Registry::from_builtin_families();
-                let end_message = match debugger
-                    .debug_session(&mut registry, debug_adapter, lister)
-                    .await
-                {
-                    // We no longer have a reference to the `debug_adapter`, so errors need
-                    // special handling to ensure they are displayed to the user.
-                    Err(error) => {
-                        eprintln!("Session ended with error: {error:?}");
-                        format!("Session ended: {error}")
+                    // Flush any pending log messages to the debug adapter Console Log.
+                    debugger.debug_logger.flush_to_dap(&mut debug_adapter)?;
+
+                    let mut registry = Registry::from_builtin_families();
+                    let end_message = match debugger
+                        .debug_session(&mut registry, debug_adapter, lister)
+                        .await
+                    {
+                        // We no longer have a reference to the `debug_adapter`, so errors need
+                        // special handling to ensure they are displayed to the user.
+                        Err(error) => {
+                            eprintln!("Session ended with error: {error:?}");
+                            format!("Session ended: {error}")
+                        }
+                        Ok(()) => format!("Closing debug session from: {addr}"),
+                    };
+                    debugger.debug_logger.log_to_console(&end_message)?;
+
+                    // Terminate after a single debug session. This is the behaviour expected by VSCode
+                    // if it started probe-rs as a child process.
+                    if single_session {
+                        break 'server;
                     }
-                    Ok(()) => format!("Closing debug session from: {addr}"),
-                };
-                debugger.debug_logger.log_to_console(&end_message)?;
 
-                // Terminate after a single debug session. This is the behaviour expected by VSCode
-                // if it started probe-rs as a child process.
-                if single_session {
                     break;
                 }
-            }
-            Err(error) => {
-                tracing::error!(
-                    "probe-rs-debugger failed to establish a socket connection. Reason: {:?}",
-                    error
-                );
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                }
+                Err(error) => {
+                    tracing::error!(
+                        "probe-rs-debugger failed to establish a socket connection. Reason: {:?}",
+                        error
+                    );
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                }
             }
         }
         debugger.debug_logger.flush()?;

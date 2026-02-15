@@ -15,6 +15,9 @@ description = "A collection of on chip debugging tools to communicate with micro
 
 default-run = "probe-rs"
 
+[lib]
+path = "src/lib.rs"
+
 [features]
 default = []
 # Include server/client functionality

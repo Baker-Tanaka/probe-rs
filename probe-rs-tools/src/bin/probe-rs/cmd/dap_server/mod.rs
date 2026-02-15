@@ -15,12 +15,13 @@ use probe_rs::{
     probe::{DebugProbeError, list::Lister},
 };
 use probe_rs_debug::DebugError;
-use server::startup::debug;
+use server::startup::{debug, debug_with_shutdown};
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
     path::Path,
 };
 use time::UtcOffset;
+use tokio_util::sync::CancellationToken;
 
 use crate::util::common_options::OperationError;
 
@@ -97,4 +98,39 @@ pub async fn run(
 ) -> Result<()> {
     let addr = SocketAddr::new(cmd.ip, cmd.port);
     debug(lister, addr, cmd.single_session, log_file, time_offset).await
+}
+
+pub async fn run_with_shutdown(
+    cmd: Cmd,
+    lister: &Lister,
+    time_offset: UtcOffset,
+    log_file: Option<&Path>,
+    shutdown: CancellationToken,
+) -> Result<()> {
+    let addr = SocketAddr::new(cmd.ip, cmd.port);
+    debug_with_shutdown(
+        lister,
+        addr,
+        cmd.single_session,
+        log_file,
+        time_offset,
+        Some(shutdown),
+    )
+    .await
+}
+
+pub async fn run_with_shutdown_on_port(
+    port: u16,
+    single_session: bool,
+    log_file: Option<&Path>,
+    time_offset: UtcOffset,
+    shutdown: CancellationToken,
+) -> Result<()> {
+    let cmd = Cmd {
+        port,
+        ip: Ipv4Addr::LOCALHOST.into(),
+        single_session,
+    };
+    let lister = Lister::new();
+    run_with_shutdown(cmd, &lister, time_offset, log_file, shutdown).await
 }
