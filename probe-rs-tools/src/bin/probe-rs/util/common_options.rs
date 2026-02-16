@@ -334,14 +334,17 @@ impl<'r> LoadedProbeOptions<'r> {
         Ok(session)
     }
 
+    #[allow(dead_code)]
     pub(crate) fn connect_under_reset(&self) -> bool {
         self.0.connect_under_reset
     }
 
+    #[allow(dead_code)]
     pub(crate) fn dry_run(&self) -> bool {
         self.0.dry_run
     }
 
+    #[allow(dead_code)]
     pub(crate) fn chip(&self) -> Option<String> {
         self.0.chip.clone()
     }

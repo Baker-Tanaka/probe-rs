@@ -133,6 +133,7 @@ impl RttDecoder {
 }
 
 pub trait RttDataHandler {
+    #[allow(async_fn_in_trait)]
     async fn on_binary_data(&mut self, data: &[u8]) -> Result<(), Error> {
         let mut formatted_data = String::with_capacity(data.len() * 4);
         for element in data {
@@ -142,6 +143,7 @@ pub trait RttDataHandler {
         self.on_string_data(formatted_data).await
     }
 
+    #[allow(async_fn_in_trait)]
     async fn on_string_data(&mut self, data: String) -> Result<(), Error>;
 }
 

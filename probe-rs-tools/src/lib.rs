@@ -60,6 +60,7 @@ pub mod util {
             format_options: FormatOptions,
             image_instruction_set: Option<InstructionSet>,
         ) -> Result<probe_rs::flashing::FlashLoader, FileDownloadError> {
+            #[allow(unreachable_patterns)]
             let format = match format_options.to_format_kind(session.target()) {
                 probe_rs::flashing::FormatKind::Bin => {
                     probe_rs::flashing::Format::Bin(probe_rs::flashing::BinOptions {

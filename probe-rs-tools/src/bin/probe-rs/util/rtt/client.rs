@@ -53,10 +53,12 @@ impl RttClient {
         }
     }
 
+    #[allow(dead_code)]
     pub fn disallow_clearing_rtt_header(&mut self) {
         self.disallow_clearing_rtt_header = true;
     }
 
+    #[allow(dead_code)]
     pub fn configure_from_loader(&mut self, loader: &FlashLoader) {
         // When using RTT with a program in flash, the RTT header will be moved to RAM on
         // startup, so clearing it before startup is ok. However, if we're downloading to the
@@ -177,6 +179,7 @@ impl RttClient {
         Ok(&[])
     }
 
+    #[allow(dead_code)]
     pub(crate) fn write_down_channel(
         &mut self,
         core: &mut Core,
@@ -257,6 +260,7 @@ impl RttClient {
             .unwrap_or_default()
     }
 
+    #[allow(dead_code)]
     pub(crate) fn down_channels(&self) -> &[RttActiveDownChannel] {
         self.target
             .as_ref()
